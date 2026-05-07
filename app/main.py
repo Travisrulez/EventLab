@@ -313,6 +313,7 @@ def build_linux_bundle_for_token(token: str, task, scenarios: list) -> str:
             parts.append(f"post_log warning {sh_single_quote('Skipped unsupported runner ' + runner + ' for Linux')}")
             continue
         script = render_script(s["script_body"], task, s)
+        script = script.replace("\r\n", "\n").replace("\r", "\n")
         encoded = b64_utf8(script)
         scenario_name = str(s["name"])
         parts.extend([
