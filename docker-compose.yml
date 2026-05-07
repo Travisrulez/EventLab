@@ -1,0 +1,33 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: eventlab
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+    volumes:
+      - db_data:/data
+    environment:
+      # Обязательно смените перед деплоем в production
+      EVENTLAB_SECRET_KEY: ${EVENTLAB_SECRET_KEY:-dev-secret-change-me}
+      EVENTLAB_DB_PATH: /data/eventlab.db
+      EVENTLAB_BASE_URL: ${EVENTLAB_BASE_URL:-http://localhost:8000}
+      EVENTLAB_COOKIE_SECURE: ${EVENTLAB_COOKIE_SECURE:-0}
+      EVENTLAB_TOKEN_TTL_HOURS: ${EVENTLAB_TOKEN_TTL_HOURS:-24}
+      # Опционально: автосоздание admin при первом запуске
+      EVENTLAB_ADMIN_USERNAME: ${EVENTLAB_ADMIN_USERNAME:-}
+      EVENTLAB_ADMIN_PASSWORD: ${EVENTLAB_ADMIN_PASSWORD:-}
+      PORT: 8000
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('localhost',8000),timeout=5); s.close()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  db_data:
+    driver: local
