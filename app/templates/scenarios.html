@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h1 class="h3 mb-0">Сценарии</h1><div class="text-muted">Шаблоны действий, которые агент выполняет на целевой машине.</div></div>
+  {% if user.role in ['admin','operator'] %}<a class="btn btn-primary" href="/scenarios/new">Добавить сценарий</a>{% endif %}
+</div>
+<div class="alert alert-info small">Поддерживаемые переменные в скриптах: <code>{{ '{{count}}' }}</code>, <code>{{ '{{delay_ms}}' }}</code>, <code>{{ '{{delay_seconds}}' }}</code>, <code>{{ '{{target_host}}' }}</code>, <code>{{ '{{target_port}}' }}</code>, <code>{{ '{{task_id}}' }}</code>.</div>
+<div class="table-responsive">
+<table class="table table-hover align-middle">
+  <thead><tr><th>ID</th><th>Название</th><th>Тип</th><th>Runner</th><th>Активен</th><th>Описание</th><th></th></tr></thead>
+  <tbody>
+  {% for s in scenarios %}
+  <tr>
+    <td>{{ s.id }}</td><td>{{ s.name }}</td><td><span class="badge text-bg-secondary">{{ s.target_type }}</span></td><td><code>{{ s.runner }}</code></td><td>{{ 'да' if s.is_active else 'нет' }}</td><td>{{ s.description }}</td>
+    <td>{% if user.role in ['admin','operator'] %}<a class="btn btn-outline-primary btn-sm" href="/scenarios/{{ s.id }}/edit">Изменить</a>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

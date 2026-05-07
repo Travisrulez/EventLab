@@ -1,0 +1,18 @@
+body { background: #f6f7fb; }
+.card { border: 0; border-radius: 1rem; }
+.stat { min-height: 125px; }
+.codearea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9rem; }
+.codebox { background: #111827; color: #e5e7eb; padding: 1rem; border-radius: .75rem; white-space: pre-wrap; }
+.logbox { background: #0b1020; color: #d1d5db; min-height: 420px; max-height: 560px; overflow: auto; padding: 1rem; border-radius: .75rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88rem; }
+.report-log { min-height: 200px; max-height: none; }
+.scenario-card { cursor: pointer; border: 1px solid #e5e7eb; }
+.scenario-card:hover { border-color: #0d6efd; }
+.status-created { background: #6c757d; color: white; }
+.status-running { background: #0d6efd; color: white; }
+.status-completed { background: #198754; color: white; }
+.status-failed, .status-expired, .status-cancelled { background: #dc3545; color: white; }
+.log-error, .log-failed { color: #f87171; }
+.log-success, .log-completed { color: #86efac; }
+.log-warning { color: #fde68a; }
+.log-info { color: #93c5fd; }
+@media print { .navbar, .no-print { display: none !important; } body { background: white; } .card { box-shadow: none !important; border: 1px solid #ddd; } }

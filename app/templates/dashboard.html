@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Панель управления</h1>
+    <div class="text-muted">Задания, сценарии и история запусков</div>
+  </div>
+  {% if user.role in ['admin','operator'] %}<a href="/tasks/new" class="btn btn-primary">Создать задание</a>{% endif %}
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="card stat"><div class="card-body"><div class="text-muted">Сценариев</div><div class="display-6">{{ scenarios|length }}</div></div></div></div>
+  <div class="col-md-4"><div class="card stat"><div class="card-body"><div class="text-muted">Последних заданий</div><div class="display-6">{{ tasks|length }}</div></div></div></div>
+  <div class="col-md-4"><div class="card stat"><div class="card-body"><div class="text-muted">Режим</div><div class="h4">Agent-based RCE Lab</div></div></div></div>
+</div>
+
+<h2 class="h5">Последние задания</h2>
+<div class="table-responsive">
+<table class="table table-sm table-hover align-middle">
+  <thead><tr><th>ID</th><th>Название</th><th>Тип</th><th>Статус</th><th>Сценарии</th><th>Создано</th><th></th></tr></thead>
+  <tbody>
+  {% for t in tasks %}
+  <tr>
+    <td>{{ t.id }}</td>
+    <td>{{ t.title }}</td>
+    <td><span class="badge text-bg-secondary">{{ t.target_type }}</span></td>
+    <td><span class="badge status-{{ t.status }}">{{ t.status }}</span></td>
+    <td>{{ t.scenario_count }}</td>
+    <td>{{ t.created_at }}</td>
+    <td><a class="btn btn-outline-primary btn-sm" href="/tasks/{{ t.id }}">Открыть</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if audit_logs %}
+<h2 class="h5 mt-4">Последние события аудита</h2>
+<div class="table-responsive">
+<table class="table table-sm">
+  <thead><tr><th>Время</th><th>Пользователь</th><th>Действие</th><th>Детали</th><th>IP</th></tr></thead>
+  <tbody>
+  {% for a in audit_logs %}
+  <tr><td>{{ a.created_at }}</td><td>{{ a.username or '-' }}</td><td>{{ a.action }}</td><td>{{ a.details }}</td><td>{{ a.ip }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

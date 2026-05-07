@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="report-header mb-4">
+  <h1 class="h3">Отчёт по заданию #{{ task.id }}</h1>
+  <div class="text-muted">{{ task.title }}</div>
+</div>
+<div class="card mb-3"><div class="card-body">
+  <h2 class="h5">Сводка</h2>
+  <table class="table table-sm">
+    <tr><th>Тип</th><td>{{ task.target_type }}</td></tr>
+    <tr><th>Статус</th><td>{{ task.status }}</td></tr>
+    <tr><th>Количество событий</th><td>{{ task.event_count }}</td></tr>
+    <tr><th>Задержка</th><td>{{ task.delay_ms }} мс</td></tr>
+    <tr><th>Цель</th><td>{{ task.target_host or '-' }}{% if task.target_port %}:{{ task.target_port }}{% endif %}</td></tr>
+    <tr><th>Создано</th><td>{{ task.created_at }}</td></tr>
+    <tr><th>Начало</th><td>{{ task.started_at or '-' }}</td></tr>
+    <tr><th>Окончание</th><td>{{ task.finished_at or '-' }}</td></tr>
+  </table>
+</div></div>
+<div class="card mb-3"><div class="card-body">
+  <h2 class="h5">Сценарии</h2>
+  <ol>{% for s in scenarios %}<li><strong>{{ s.name }}</strong> — {{ s.description }} <code>{{ s.runner }}</code></li>{% endfor %}</ol>
+</div></div>
+<div class="card mb-3"><div class="card-body">
+  <h2 class="h5">Запуски агентов</h2>
+  <table class="table table-sm"><thead><tr><th>Host</th><th>OS</th><th>Версия</th><th>Статус</th><th>Начало</th><th>Окончание</th></tr></thead><tbody>{% for r in runs %}<tr><td>{{ r.hostname }}</td><td>{{ r.os_name }}</td><td>{{ r.agent_version }}</td><td>{{ r.status }}</td><td>{{ r.started_at }}</td><td>{{ r.finished_at or '-' }}</td></tr>{% endfor %}</tbody></table>
+</div></div>
+<div class="card"><div class="card-body">
+  <h2 class="h5">Лог выполнения</h2>
+  <div class="logbox report-log">{% for l in logs %}<div><span class="text-muted">{{ l.created_at }}</span> [{{ l.level }}] {{ l.message }}</div>{% endfor %}</div>
+</div></div>
+<div class="mt-3 no-print"><button onclick="window.print()" class="btn btn-primary">Печать / сохранить в PDF</button></div>
+{% endblock %}

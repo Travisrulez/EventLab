@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3">Пользователи</h1>
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card"><div class="card-body">
+      <h2 class="h5">Создать пользователя</h2>
+      <form method="post" action="/users">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <div class="mb-3"><label class="form-label">Логин</label><input name="username" class="form-control" required></div>
+        <div class="mb-3"><label class="form-label">Пароль</label><input name="password" type="password" class="form-control" required minlength="10"></div>
+        <div class="mb-3"><label class="form-label">Роль</label><select name="role" class="form-select"><option value="admin">admin</option><option value="operator">operator</option><option value="viewer">viewer</option></select></div>
+        <button class="btn btn-primary">Создать</button>
+      </form>
+    </div></div>
+  </div>
+  <div class="col-lg-7">
+    <div class="table-responsive"><table class="table table-sm">
+      <thead><tr><th>ID</th><th>Логин</th><th>Роль</th><th>Активен</th><th>Последний вход</th></tr></thead>
+      <tbody>{% for u in users %}<tr><td>{{ u.id }}</td><td>{{ u.username }}</td><td>{{ u.role }}</td><td>{{ 'да' if u.is_active else 'нет' }}</td><td>{{ u.last_login_at or '-' }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div>
+</div>
+{% endblock %}

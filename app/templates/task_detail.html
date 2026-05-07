@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-1">Задание #{{ task.id }} — {{ task.title }}</h1>
+    <div><span class="badge text-bg-secondary">{{ task.target_type }}</span> <span class="badge status-{{ task.status }}">{{ task.status }}</span></div>
+  </div>
+  <a class="btn btn-outline-secondary" href="/tasks/{{ task.id }}/report" target="_blank">Открыть отчёт</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Количество</div><div class="h4">{{ task.event_count }}</div></div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Задержка</div><div class="h4">{{ task.delay_ms }} мс</div></div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Цель</div><div class="h6">{{ task.target_host or '-' }}{% if task.target_port %}:{{ task.target_port }}{% endif %}</div></div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body"><div class="text-muted small">Истекает</div><div class="small">{{ task.expires_at }}</div></div></div></div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <h2 class="h5">Запуск на целевой машине</h2>
+    {% if agent_url %}
+    <p class="text-muted small">Ссылка задания отображается только после создания в текущей сессии. Не публикуйте её: токен даёт право агенту получить сценарии.</p>
+    <div class="mb-3"><label class="form-label">Agent Task URL</label><input class="form-control font-monospace" value="{{ agent_url }}" readonly onclick="this.select()"></div>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <h3 class="h6">Windows без Python</h3>
+        <p><a class="btn btn-sm btn-outline-primary" href="/download/agents/windows">Скачать windows_agent.ps1</a></p>
+        <pre class="codebox">powershell -NoProfile -ExecutionPolicy RemoteSigned -File .\windows_agent.ps1 -TaskUrl "{{ agent_url }}"</pre>
+      </div>
+      <div class="col-lg-6">
+        <h3 class="h6">Linux без Python</h3>
+        <p><a class="btn btn-sm btn-outline-primary" href="/download/agents/linux">Скачать linux_agent.sh</a></p>
+        <pre class="codebox">chmod +x ./linux_agent.sh
+./linux_agent.sh "{{ agent_url }}"</pre>
+      </div>
+      <div class="col-lg-12">
+        <h3 class="h6">Python-агент для упаковки в .exe через PyInstaller</h3>
+        <p><a class="btn btn-sm btn-outline-primary" href="/download/agents/python">Скачать python_agent.py</a></p>
+        <pre class="codebox">python python_agent.py --task-url "{{ agent_url }}"</pre>
+      </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning mb-0">Полная ссылка не сохранена в базе и доступна только сразу после создания задания. Для нового запуска создайте новое задание.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card h-100"><div class="card-body">
+      <h2 class="h5">Сценарии задания</h2>
+      <ul class="list-group list-group-flush">
+        {% for s in scenarios %}
+        <li class="list-group-item px-0"><div class="fw-semibold">{{ s.name }}</div><div class="small text-muted">{{ s.description }}</div><span class="badge text-bg-light border">{{ s.runner }}</span></li>
+        {% endfor %}
+      </ul>
+      <h2 class="h5 mt-4">Запуски агентов</h2>
+      <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Host</th><th>OS</th><th>Status</th><th>Start</th></tr></thead><tbody>{% for r in runs %}<tr><td>{{ r.hostname }}</td><td>{{ r.os_name }}</td><td>{{ r.status }}</td><td>{{ r.started_at }}</td></tr>{% endfor %}</tbody></table></div>
+    </div></div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card h-100"><div class="card-body">
+      <div class="d-flex justify-content-between"><h2 class="h5">Онлайн-лог</h2><span class="small text-muted" id="wsState">подключение...</span></div>
+      <div id="logbox" class="logbox">
+        {% for l in logs %}<div><span class="text-muted">{{ l.created_at }}</span> <span class="log-{{ l.level }}">[{{ l.level }}]</span> {{ l.message }}</div>{% endfor %}
+      </div>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const logbox = document.getElementById('logbox');
+const wsState = document.getElementById('wsState');
+const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+const ws = new WebSocket(`${protocol}://${location.host}/ws/tasks/{{ task.id }}`);
+ws.onopen = () => wsState.textContent = 'онлайн';
+ws.onclose = () => wsState.textContent = 'отключено';
+ws.onmessage = (ev) => {
+  const data = JSON.parse(ev.data);
+  const row = document.createElement('div');
+  const now = new Date().toLocaleString();
+  row.innerHTML = `<span class="text-muted">${now}</span> <span class="log-${data.level}">[${data.level}]</span> ${escapeHtml(data.message)}`;
+  logbox.appendChild(row);
+  logbox.scrollTop = logbox.scrollHeight;
+};
+function escapeHtml(text) {
+  return String(text).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+logbox.scrollTop = logbox.scrollHeight;
+</script>
+{% endblock %}

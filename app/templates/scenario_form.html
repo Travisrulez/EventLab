@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3">{{ 'Изменить сценарий' if scenario else 'Новый сценарий' }}</h1>
+<form method="post" action="{{ '/scenarios/' ~ scenario.id ~ '/edit' if scenario else '/scenarios/new' }}">
+  <input type="hidden" name="_csrf" value="{{ csrf }}">
+  <div class="row g-3">
+    <div class="col-md-6"><label class="form-label">Название</label><input class="form-control" name="name" value="{{ scenario.name if scenario else '' }}" required></div>
+    <div class="col-md-3"><label class="form-label">Тип</label><select name="target_type" class="form-select">
+      {% for v in ['windows','linux','ids'] %}<option value="{{ v }}" {% if scenario and scenario.target_type==v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select></div>
+    <div class="col-md-3"><label class="form-label">Runner</label><select name="runner" class="form-select">
+      {% for v in ['powershell','cmd','bash'] %}<option value="{{ v }}" {% if scenario and scenario.runner==v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select></div>
+    <div class="col-12"><label class="form-label">Описание</label><textarea class="form-control" name="description" rows="2">{{ scenario.description if scenario else '' }}</textarea></div>
+    <div class="col-12"><label class="form-label">Скрипт</label><textarea class="form-control codearea" name="script_body" rows="16" required>{{ scenario.script_body if scenario else '' }}</textarea></div>
+    {% if scenario %}<div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" name="is_active" id="is_active" {% if scenario.is_active %}checked{% endif %}><label class="form-check-label" for="is_active">Активен</label></div>{% endif %}
+  </div>
+  <div class="mt-3"><button class="btn btn-primary">Сохранить</button><a class="btn btn-outline-secondary" href="/scenarios">Назад</a></div>
+</form>
+{% endblock %}
