@@ -120,11 +120,12 @@ def create_task(
     expires_at: str,
     created_by: int,
     scenario_ids: list[int],
+    is_load_test: bool = False,
 ) -> int:
     task_id = db.execute(
         """
-        INSERT INTO tasks(title, target_type, event_count, delay_ms, target_host, target_port, token_hash, token_preview, expires_at, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO tasks(title, target_type, event_count, delay_ms, target_host, target_port, token_hash, token_preview, expires_at, created_by, is_load_test)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             title.strip(),
@@ -137,6 +138,7 @@ def create_task(
             token_preview,
             expires_at,
             created_by,
+            1 if is_load_test else 0,
         ),
     )
     db.execute_many(
@@ -224,3 +226,25 @@ def finish_agent_run(run_id: int, status: str) -> None:
 
 def list_agent_runs(task_id: int):
     return db.all_rows("SELECT * FROM agent_runs WHERE task_id=? ORDER BY id DESC", (task_id,))
+
+
+def delete_task(task_id: int) -> int:
+    with db.connect() as conn:
+        cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        conn.commit()
+        return int(cur.rowcount or 0)
+
+
+def delete_old_tasks(older_than_days: int = 7) -> int:
+    days = max(1, min(int(older_than_days), 3650))
+    with db.connect() as conn:
+        cur = conn.execute(
+            """
+            DELETE FROM tasks
+            WHERE status IN ('completed', 'failed', 'expired', 'cancelled')
+              AND datetime(created_at) < datetime('now', ?)
+            """,
+            (f"-{days} days",),
+        )
+        conn.commit()
+        return int(cur.rowcount or 0)

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-1">Нагрузочное тестирование</h1>
+    <div class="text-muted">Административный режим: запуск тех же сценариев с дополнительным сбором метрик CPU/RAM/диска на агенте.</div>
+  </div>
+  <a href="/dashboard" class="btn btn-outline-secondary">Назад</a>
+</div>
+
+<div class="alert alert-warning small">
+  Используйте только на согласованных тестовых хостах. Для первого запуска рекомендуется небольшое количество событий: 10–50 и задержка 500–1000 мс.
+  Метрики будут отправляться в онлайн-лог как строки <code>METRIC</code> до и после каждого сценария.
+</div>
+
+<ul class="nav nav-pills mb-3">
+  {% for t in ['windows','linux','ids'] %}
+  <li class="nav-item"><a class="nav-link {% if target_type==t %}active{% endif %}" href="/load-test?target_type={{ t }}">{{ t }}</a></li>
+  {% endfor %}
+</ul>
+
+<form method="post" action="/load-test">
+  <input type="hidden" name="_csrf" value="{{ csrf }}">
+  <input type="hidden" name="target_type" value="{{ target_type }}">
+  <div class="card mb-4"><div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Название теста</label>
+        <input name="title" class="form-control" value="load test {{ target_type }}" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Количество событий</label>
+        <input name="event_count" type="number" min="1" max="100000" value="50" class="form-control" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Задержка, мс</label>
+        <input name="delay_ms" type="number" min="0" max="60000" value="500" class="form-control" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Целевой хост/домен для сетевых сценариев</label>
+        <input name="target_host" class="form-control" placeholder="например, 72.56.245.146 или ids-lab.local">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Порт</label>
+        <input name="target_port" type="number" min="0" max="65535" value="8000" class="form-control">
+      </div>
+    </div>
+  </div></div>
+
+  <h2 class="h5">Сценарии для нагрузки</h2>
+  {% if not scenarios %}<div class="alert alert-warning">Нет активных сценариев для типа {{ target_type }}.</div>{% endif %}
+  <div class="row g-3">
+  {% for s in scenarios %}
+    <div class="col-md-6">
+      <label class="card h-100 scenario-card">
+        <div class="card-body">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="scenario_ids" value="{{ s.id }}">
+            <span class="form-check-label fw-semibold">{{ s.name }}</span>
+          </div>
+          <div class="small text-muted mt-1">{{ s.description }}</div>
+          <div class="mt-2"><span class="badge text-bg-secondary">{{ s.target_type }}</span> <span class="badge text-bg-light border">{{ s.runner }}</span></div>
+        </div>
+      </label>
+    </div>
+  {% endfor %}
+  </div>
+
+  <button class="btn btn-danger mt-3" {% if not scenarios %}disabled{% endif %}>Создать нагрузочный тест</button>
+</form>
+{% endblock %}

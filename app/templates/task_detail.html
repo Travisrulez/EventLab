@@ -3,9 +3,17 @@
 <div class="d-flex justify-content-between align-items-start mb-3">
   <div>
     <h1 class="h3 mb-1">Задание #{{ task.id }} — {{ task.title }}</h1>
-    <div><span class="badge text-bg-secondary">{{ task.target_type }}</span> <span class="badge status-{{ task.status }}">{{ task.status }}</span></div>
+    <div><span class="badge text-bg-secondary">{{ task.target_type }}</span> <span class="badge status-{{ task.status }}">{{ task.status }}</span>{% if task.is_load_test %} <span class="badge text-bg-danger">load test</span>{% endif %}</div>
   </div>
-  <a class="btn btn-outline-secondary" href="/tasks/{{ task.id }}/report" target="_blank">Открыть отчёт</a>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="/tasks/{{ task.id }}/report" target="_blank">Открыть отчёт</a>
+    {% if user.role == 'admin' %}
+    <form method="post" action="/tasks/{{ task.id }}/delete" onsubmit="return confirm('Удалить задание #{{ task.id }} со всеми логами?');">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <button class="btn btn-outline-danger">Удалить</button>
+    </form>
+    {% endif %}
+  </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -45,6 +53,28 @@
   </div>
 </div>
 
+
+{% if task.is_load_test or metric_points %}
+<div class="card mb-4" id="metricCard">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <div>
+        <h2 class="h5 mb-1">Графики нагрузки</h2>
+        <div class="text-muted small">Строятся по строкам <code>METRIC</code>, которые агент отправляет до и после сценариев.</div>
+      </div>
+      <span class="badge text-bg-light border" id="metricCount">0 точек</span>
+    </div>
+    <div id="metricEmpty" class="alert alert-secondary small mb-3">Пока нет метрик. Они появятся после запуска агента в режиме нагрузочного тестирования.</div>
+    <div class="row g-3 metric-grid">
+      <div class="col-lg-6"><div class="metric-panel"><div class="metric-title" id="metricTitleCpu">CPU / Load average</div><canvas id="chartCpu" height="170"></canvas></div></div>
+      <div class="col-lg-6"><div class="metric-panel"><div class="metric-title">RAM, % использования</div><canvas id="chartRam" height="170"></canvas></div></div>
+      <div class="col-lg-6"><div class="metric-panel"><div class="metric-title">Количество процессов</div><canvas id="chartProc" height="170"></canvas></div></div>
+      <div class="col-lg-6"><div class="metric-panel"><div class="metric-title" id="metricTitleDisk">Свободное место, GB/MB</div><canvas id="chartDisk" height="170"></canvas></div></div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="row g-4">
   <div class="col-lg-5">
     <div class="card h-100"><div class="card-body">
@@ -62,7 +92,9 @@
     <div class="card h-100"><div class="card-body">
       <div class="d-flex justify-content-between"><h2 class="h5">Онлайн-лог</h2><span class="small text-muted" id="wsState">подключение...</span></div>
       <div id="logbox" class="logbox">
-        {% for l in logs %}<div><span class="text-muted">{{ l.created_at }}</span> <span class="log-{{ l.level }}">[{{ l.level }}]</span> {{ l.message }}</div>{% endfor %}
+        {% for l in logs %}
+        <div class="log-line log-row-{{ l.level }}"><span class="log-time">{{ l.created_at }}</span> <span class="log-level log-{{ l.level }}">[{{ l.level }}]</span> <span class="log-message">{{ l.message }}</span></div>
+        {% endfor %}
       </div>
     </div></div>
   </div>
@@ -73,6 +105,149 @@
 const logbox = document.getElementById('logbox');
 const wsState = document.getElementById('wsState');
 const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+const initialMetricPoints = {{ metric_points|default([])|tojson }};
+const metricPoints = Array.isArray(initialMetricPoints) ? initialMetricPoints.slice() : [];
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+
+function parseMetricMessage(message, timeLabel) {
+  const text = String(message || '');
+  const idx = text.indexOf('METRIC');
+  if (idx < 0) return null;
+  const payload = text.slice(idx + 6).trim();
+  const point = {time: timeLabel || new Date().toLocaleString(), label: timeLabel || new Date().toLocaleTimeString()};
+  for (const part of payload.split(/\s+/)) {
+    if (!part.includes('=')) continue;
+    const eq = part.indexOf('=');
+    const key = part.slice(0, eq).toLowerCase();
+    const value = part.slice(eq + 1).replace(/[,;]$/, '');
+    point[key] = value;
+  }
+  const numKeys = ['cpu_percent','ram_used_mb','ram_total_mb','processes','disk_c_free_gb','mem_available_mb','mem_total_mb','tmp_free_mb'];
+  for (const key of numKeys) {
+    if (point[key] !== undefined) {
+      const n = Number(String(point[key]).replace(',', '.'));
+      point[key] = Number.isFinite(n) ? n : null;
+    }
+  }
+  if (point.loadavg) {
+    const parts = String(point.loadavg).split(',').map(v => Number(String(v).replace(',', '.')));
+    point.loadavg_1m = Number.isFinite(parts[0]) ? parts[0] : null;
+    point.loadavg_5m = Number.isFinite(parts[1]) ? parts[1] : null;
+    point.loadavg_15m = Number.isFinite(parts[2]) ? parts[2] : null;
+  }
+  if (point.ram_total_mb && point.ram_used_mb !== undefined && point.ram_used_mb !== null) {
+    point.ram_used_percent = +(point.ram_used_mb * 100 / point.ram_total_mb).toFixed(2);
+  }
+  if (point.mem_total_mb && point.mem_available_mb !== undefined && point.mem_available_mb !== null) {
+    point.mem_used_percent = +((point.mem_total_mb - point.mem_available_mb) * 100 / point.mem_total_mb).toFixed(2);
+  }
+  point.stage = point.stage || 'unknown';
+  return point;
+}
+
+function getSeries(points, keys) {
+  return points.map((p, i) => {
+    for (const key of keys) {
+      if (p[key] !== undefined && p[key] !== null && p[key] !== '') return {x: i, y: Number(p[key]), label: p.stage || p.label || String(i + 1)};
+    }
+    return {x: i, y: null, label: p.stage || p.label || String(i + 1)};
+  }).filter(p => Number.isFinite(p.y));
+}
+
+function drawChart(canvasId, points, keys, suffix) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.getBoundingClientRect();
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.max(320, Math.floor(rect.width || 520));
+  const height = Number(canvas.getAttribute('height')) || 170;
+  canvas.width = width * ratio;
+  canvas.height = height * ratio;
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+
+  const data = getSeries(points, keys);
+  ctx.font = '12px ui-monospace, Consolas, monospace';
+  if (data.length === 0) {
+    ctx.fillStyle = '#6b7280';
+    ctx.fillText('нет данных', 14, 32);
+    return;
+  }
+
+  const padL = 46, padR = 14, padT = 14, padB = 30;
+  const ys = data.map(d => d.y);
+  let minY = Math.min(...ys);
+  let maxY = Math.max(...ys);
+  if (minY === maxY) { minY = Math.max(0, minY - 1); maxY = maxY + 1; }
+  if (minY > 0) minY = 0;
+
+  const plotW = width - padL - padR;
+  const plotH = height - padT - padB;
+  const xFor = (i) => padL + (data.length === 1 ? plotW / 2 : i * plotW / (data.length - 1));
+  const yFor = (v) => padT + (maxY - v) * plotH / (maxY - minY);
+
+  ctx.strokeStyle = '#243044';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + i * plotH / 4;
+    ctx.moveTo(padL, y);
+    ctx.lineTo(width - padR, y);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = '#94a3b8';
+  for (let i = 0; i <= 4; i++) {
+    const val = maxY - i * (maxY - minY) / 4;
+    ctx.fillText(`${val.toFixed(val >= 10 ? 0 : 1)}${suffix || ''}`, 4, padT + i * plotH / 4 + 4);
+  }
+
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  data.forEach((d, i) => {
+    const x = xFor(i), y = yFor(d.y);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  ctx.fillStyle = '#f8fafc';
+  data.forEach((d, i) => {
+    const x = xFor(i), y = yFor(d.y);
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  const first = data[0];
+  const last = data[data.length - 1];
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillText(`start: ${first.y.toFixed(1)}${suffix || ''}`, padL, height - 10);
+  ctx.fillText(`last: ${last.y.toFixed(1)}${suffix || ''}`, Math.max(padL + 120, width - 150), height - 10);
+}
+
+function redrawMetrics() {
+  const metricCount = document.getElementById('metricCount');
+  const metricEmpty = document.getElementById('metricEmpty');
+  if (metricCount) metricCount.textContent = `${metricPoints.length} точек`;
+  if (metricEmpty) metricEmpty.style.display = metricPoints.length ? 'none' : 'block';
+  const cpuTitle = document.getElementById('metricTitleCpu');
+  const diskTitle = document.getElementById('metricTitleDisk');
+  if (cpuTitle) cpuTitle.textContent = metricPoints.some(p => p.cpu_percent !== undefined) ? 'CPU, %' : 'Load average 1m';
+  if (diskTitle) diskTitle.textContent = metricPoints.some(p => p.disk_c_free_gb !== undefined) ? 'Свободно на C:, GB' : 'Свободно в /tmp, MB';
+  drawChart('chartCpu', metricPoints, ['cpu_percent','loadavg_1m'], metricPoints.some(p => p.cpu_percent !== undefined) ? '%' : '');
+  drawChart('chartRam', metricPoints, ['ram_used_percent','mem_used_percent'], '%');
+  drawChart('chartProc', metricPoints, ['processes'], '');
+  drawChart('chartDisk', metricPoints, ['disk_c_free_gb','tmp_free_mb'], metricPoints.some(p => p.disk_c_free_gb !== undefined) ? 'GB' : 'MB');
+}
+
+redrawMetrics();
+window.addEventListener('resize', redrawMetrics);
+
 const ws = new WebSocket(`${protocol}://${location.host}/ws/tasks/{{ task.id }}`);
 ws.onopen = () => wsState.textContent = 'онлайн';
 ws.onclose = () => wsState.textContent = 'отключено';
@@ -80,13 +255,17 @@ ws.onmessage = (ev) => {
   const data = JSON.parse(ev.data);
   const row = document.createElement('div');
   const now = new Date().toLocaleString();
-  row.innerHTML = `<span class="text-muted">${now}</span> <span class="log-${data.level}">[${data.level}]</span> ${escapeHtml(data.message)}`;
+  const level = escapeHtml(data.level || 'info');
+  const message = String(data.message || '');
+  row.className = `log-line log-row-${level}`;
+  row.innerHTML = `<span class="log-time">${now}</span> <span class="log-level log-${level}">[${level}]</span> <span class="log-message">${escapeHtml(message)}</span>`;
   logbox.appendChild(row);
   logbox.scrollTop = logbox.scrollHeight;
+  if ((data.level || '').toLowerCase() === 'metric') {
+    const point = parseMetricMessage(message, now);
+    if (point) { metricPoints.push(point); redrawMetrics(); }
+  }
 };
-function escapeHtml(text) {
-  return String(text).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-}
 logbox.scrollTop = logbox.scrollHeight;
 </script>
 {% endblock %}

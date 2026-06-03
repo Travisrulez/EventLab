@@ -7,7 +7,7 @@
 <div class="card mb-3"><div class="card-body">
   <h2 class="h5">Сводка</h2>
   <table class="table table-sm">
-    <tr><th>Тип</th><td>{{ task.target_type }}</td></tr>
+    <tr><th>Тип</th><td>{{ task.target_type }}{% if task.is_load_test %} <span class="badge text-bg-danger">load test</span>{% endif %}</td></tr>
     <tr><th>Статус</th><td>{{ task.status }}</td></tr>
     <tr><th>Количество событий</th><td>{{ task.event_count }}</td></tr>
     <tr><th>Задержка</th><td>{{ task.delay_ms }} мс</td></tr>
@@ -25,9 +25,66 @@
   <h2 class="h5">Запуски агентов</h2>
   <table class="table table-sm"><thead><tr><th>Host</th><th>OS</th><th>Версия</th><th>Статус</th><th>Начало</th><th>Окончание</th></tr></thead><tbody>{% for r in runs %}<tr><td>{{ r.hostname }}</td><td>{{ r.os_name }}</td><td>{{ r.agent_version }}</td><td>{{ r.status }}</td><td>{{ r.started_at }}</td><td>{{ r.finished_at or '-' }}</td></tr>{% endfor %}</tbody></table>
 </div></div>
+
+{% if task.is_load_test or metric_points %}
+<div class="card mb-3"><div class="card-body">
+  <h2 class="h5">Графики нагрузки</h2>
+  <div class="text-muted small mb-3">Графики построены по строкам <code>METRIC</code> из лога выполнения.</div>
+  {% if not metric_points %}<div class="alert alert-secondary small">Метрики не найдены.</div>{% endif %}
+  <div class="row g-3 metric-grid">
+    <div class="col-lg-6"><div class="metric-panel"><div class="metric-title" id="metricTitleCpu">CPU / Load average</div><canvas id="chartCpu" height="170"></canvas></div></div>
+    <div class="col-lg-6"><div class="metric-panel"><div class="metric-title">RAM, % использования</div><canvas id="chartRam" height="170"></canvas></div></div>
+    <div class="col-lg-6"><div class="metric-panel"><div class="metric-title">Количество процессов</div><canvas id="chartProc" height="170"></canvas></div></div>
+    <div class="col-lg-6"><div class="metric-panel"><div class="metric-title" id="metricTitleDisk">Свободное место, GB/MB</div><canvas id="chartDisk" height="170"></canvas></div></div>
+  </div>
+</div></div>
+{% endif %}
+
 <div class="card"><div class="card-body">
   <h2 class="h5">Лог выполнения</h2>
-  <div class="logbox report-log">{% for l in logs %}<div><span class="text-muted">{{ l.created_at }}</span> [{{ l.level }}] {{ l.message }}</div>{% endfor %}</div>
+  <div class="logbox report-log">{% for l in logs %}<div class="log-line log-row-{{ l.level }}"><span class="log-time">{{ l.created_at }}</span> <span class="log-level log-{{ l.level }}">[{{ l.level }}]</span> <span class="log-message">{{ l.message }}</span></div>{% endfor %}</div>
 </div></div>
 <div class="mt-3 no-print"><button onclick="window.print()" class="btn btn-primary">Печать / сохранить в PDF</button></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const metricPoints = {{ metric_points|default([])|tojson }};
+function getSeries(points, keys) {
+  return points.map((p, i) => {
+    for (const key of keys) if (p[key] !== undefined && p[key] !== null && p[key] !== '') return {x:i,y:Number(p[key])};
+    return {x:i,y:null};
+  }).filter(p => Number.isFinite(p.y));
+}
+function drawChart(canvasId, points, keys, suffix) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.getBoundingClientRect();
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.max(320, Math.floor(rect.width || 520));
+  const height = Number(canvas.getAttribute('height')) || 170;
+  canvas.width = width * ratio; canvas.height = height * ratio; ctx.setTransform(ratio,0,0,ratio,0,0); ctx.clearRect(0,0,width,height);
+  const data = getSeries(points, keys); ctx.font = '12px ui-monospace, Consolas, monospace';
+  if (!data.length) { ctx.fillStyle='#6b7280'; ctx.fillText('нет данных',14,32); return; }
+  const padL=46,padR=14,padT=14,padB=30, plotW=width-padL-padR, plotH=height-padT-padB;
+  const ys=data.map(d=>d.y); let minY=Math.min(...ys), maxY=Math.max(...ys); if(minY===maxY){minY=Math.max(0,minY-1);maxY=maxY+1;} if(minY>0)minY=0;
+  const xFor=i=>padL+(data.length===1?plotW/2:i*plotW/(data.length-1)); const yFor=v=>padT+(maxY-v)*plotH/(maxY-minY);
+  ctx.strokeStyle='#243044'; ctx.lineWidth=1; ctx.beginPath(); for(let i=0;i<=4;i++){const y=padT+i*plotH/4;ctx.moveTo(padL,y);ctx.lineTo(width-padR,y);} ctx.stroke();
+  ctx.fillStyle='#64748b'; for(let i=0;i<=4;i++){const val=maxY-i*(maxY-minY)/4;ctx.fillText(`${val.toFixed(val>=10?0:1)}${suffix||''}`,4,padT+i*plotH/4+4);}
+  ctx.strokeStyle='#0ea5e9'; ctx.lineWidth=2; ctx.beginPath(); data.forEach((d,i)=>{const x=xFor(i), y=yFor(d.y); if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);}); ctx.stroke();
+  ctx.fillStyle='#111827'; data.forEach((d,i)=>{const x=xFor(i),y=yFor(d.y);ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill();});
+  const first=data[0], last=data[data.length-1]; ctx.fillStyle='#334155'; ctx.fillText(`start: ${first.y.toFixed(1)}${suffix||''}`,padL,height-10); ctx.fillText(`last: ${last.y.toFixed(1)}${suffix||''}`,Math.max(padL+120,width-150),height-10);
+}
+function redrawMetrics(){
+  const cpuTitle=document.getElementById('metricTitleCpu'), diskTitle=document.getElementById('metricTitleDisk');
+  if(cpuTitle) cpuTitle.textContent=metricPoints.some(p=>p.cpu_percent!==undefined)?'CPU, %':'Load average 1m';
+  if(diskTitle) diskTitle.textContent=metricPoints.some(p=>p.disk_c_free_gb!==undefined)?'Свободно на C:, GB':'Свободно в /tmp, MB';
+  drawChart('chartCpu',metricPoints,['cpu_percent','loadavg_1m'],metricPoints.some(p=>p.cpu_percent!==undefined)?'%':'');
+  drawChart('chartRam',metricPoints,['ram_used_percent','mem_used_percent'],'%');
+  drawChart('chartProc',metricPoints,['processes'],'');
+  drawChart('chartDisk',metricPoints,['disk_c_free_gb','tmp_free_mb'],metricPoints.some(p=>p.disk_c_free_gb!==undefined)?'GB':'MB');
+}
+redrawMetrics(); window.addEventListener('resize', redrawMetrics);
+</script>
 {% endblock %}

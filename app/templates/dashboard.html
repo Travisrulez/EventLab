@@ -5,7 +5,10 @@
     <h1 class="h3 mb-0">Панель управления</h1>
     <div class="text-muted">Задания, сценарии и история запусков</div>
   </div>
-  {% if user.role in ['admin','operator'] %}<a href="/tasks/new" class="btn btn-primary">Создать задание</a>{% endif %}
+  <div class="d-flex gap-2">
+    {% if user.role == 'admin' %}<a href="/load-test" class="btn btn-outline-danger">Нагрузочное тестирование</a>{% endif %}
+    {% if user.role in ['admin','operator'] %}<a href="/tasks/new" class="btn btn-primary">Создать задание</a>{% endif %}
+  </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -13,6 +16,17 @@
   <div class="col-md-4"><div class="card stat"><div class="card-body"><div class="text-muted">Последних заданий</div><div class="display-6">{{ tasks|length }}</div></div></div></div>
   <div class="col-md-4"><div class="card stat"><div class="card-body"><div class="text-muted">Режим</div><div class="h4">Agent-based RCE Lab</div></div></div></div>
 </div>
+
+{% if user.role == 'admin' %}
+<div class="card mb-4"><div class="card-body">
+  <form method="post" action="/tasks/delete-old" class="row gy-2 gx-3 align-items-end" onsubmit="return confirm('Удалить старые завершённые задания? Логи и запуски агентов также будут удалены.');">
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    <div class="col-auto"><label class="form-label mb-0">Удалить завершённые старше, дней</label><input class="form-control form-control-sm" type="number" name="older_than_days" min="1" max="3650" value="7"></div>
+    <div class="col-auto"><button class="btn btn-outline-danger btn-sm">Удалить старые задания</button></div>
+    <div class="col small text-muted">Удаляются только статусы completed, failed, expired, cancelled.</div>
+  </form>
+</div></div>
+{% endif %}
 
 <h2 class="h5">Последние задания</h2>
 <div class="table-responsive">
@@ -22,12 +36,20 @@
   {% for t in tasks %}
   <tr>
     <td>{{ t.id }}</td>
-    <td>{{ t.title }}</td>
+    <td>{{ t.title }} {% if t.is_load_test %}<span class="badge text-bg-danger ms-1">load</span>{% endif %}</td>
     <td><span class="badge text-bg-secondary">{{ t.target_type }}</span></td>
     <td><span class="badge status-{{ t.status }}">{{ t.status }}</span></td>
     <td>{{ t.scenario_count }}</td>
     <td>{{ t.created_at }}</td>
-    <td><a class="btn btn-outline-primary btn-sm" href="/tasks/{{ t.id }}">Открыть</a></td>
+    <td class="text-nowrap">
+      <a class="btn btn-outline-primary btn-sm" href="/tasks/{{ t.id }}">Открыть</a>
+      {% if user.role == 'admin' %}
+      <form method="post" action="/tasks/{{ t.id }}/delete" class="d-inline" onsubmit="return confirm('Удалить задание #{{ t.id }} со всеми логами?');">
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <button class="btn btn-outline-danger btn-sm">Удалить</button>
+      </form>
+      {% endif %}
+    </td>
   </tr>
   {% endfor %}
   </tbody>

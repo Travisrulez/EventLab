@@ -18,6 +18,7 @@
         <li class="nav-item"><a class="nav-link" href="/dashboard">Панель</a></li>
         <li class="nav-item"><a class="nav-link" href="/tasks/new">Новое задание</a></li>
         <li class="nav-item"><a class="nav-link" href="/scenarios">Сценарии</a></li>
+        {% if user.role == 'admin' %}<li class="nav-item"><a class="nav-link" href="/load-test">Нагрузочное тестирование</a></li>{% endif %}
         {% if user.role == 'admin' %}<li class="nav-item"><a class="nav-link" href="/users">Пользователи</a></li>{% endif %}
       </ul>
       <span class="navbar-text me-3">{{ user.username }} · {{ user.role }}</span>
